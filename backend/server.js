@@ -1,7 +1,6 @@
 import cors from 'cors';
 import express from 'express';
 import { auditWebsiteWithBrowser } from './realUserAuditor.js';
-import pythonBridge from './python-bridge.js';
 import { scrapeWithAgent } from './scraperAgent.js';
 
 // Simple logger
@@ -19,22 +18,23 @@ const logger = {
 const app = express();
 const port = process.env.PORT || 8787;
 
-// In-memory storage for user feedback (in production, use a database)
+// In-memory storage (use database in production)
 const userFeedback = [];
 const auditHistory = [];
 
+// Middleware
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 
-// Health check
+// ==================== HEALTH CHECK ====================
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'webai-auditor-backend', version: '2.0' });
 });
 
-// Main audit endpoint
+// ==================== MAIN AUDIT ENDPOINT ====================
 app.post('/api/audit', async (req, res) => {
   const url = String(req.body?.url || '').trim();
-  const language = req.body?.language || 'en'; // Default to English if not specified
+  const language = req.body?.language || 'en';
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required.' });
@@ -46,9 +46,13 @@ app.post('/api/audit', async (req, res) => {
     console.log(`🌐 Language: ${language === 'hi' ? 'हिंदी' : 'English'}`);
     console.log(`${'='.repeat(60)}`);
 
-    const report = await auditWebsiteWithBrowser(url, { username: req.body?.username, password: req.body?.password }, language);
+    const report = await auditWebsiteWithBrowser(
+      url,
+      { username: req.body?.username, password: req.body?.password },
+      language
+    );
 
-    // Store in history (in-memory for now)
+    // Store in history
     auditHistory.unshift({
       ...report,
       id: Date.now().toString(),
@@ -73,108 +77,7 @@ app.post('/api/audit', async (req, res) => {
   }
 });
 
-// Submit feedback on an audit
-app.post('/api/feedback', (req, res) => {
-  const { auditId, url, rating, feedback, category } = req.body;
-
-  if (!auditId || !feedback) {
-    return res.status(400).json({ error: 'auditId and feedback are required.' });
-  }
-
-  const feedbackEntry = {
-    id: Date.now().toString(),
-    auditId,
-    url,
-    rating: Number(rating) || null,
-    feedback: String(feedback),
-    category: category || 'general',
-    timestamp: new Date().toISOString(),
-    status: 'pending'
-  };
-
-  userFeedback.unshift(feedbackEntry);
-
-  // Keep only last 500 feedbacks
-  if (userFeedback.length > 500) {
-    userFeedback.pop();
-  }
-
-  console.log(`📝 New feedback received for ${url || auditId}`);
-
-  return res.json({
-    success: true,
-    message: 'Feedback received! Thank you for helping improve the auditor.'
-  });
-});
-
-// Get feedback for an audit
-app.get('/api/feedback/:auditId', (req, res) => {
-  const { auditId } = req.params;
-  const feedbacks = userFeedback.filter(f => f.auditId === auditId);
-
-  res.json({
-    auditId,
-    feedbacks: feedbacks.slice(0, 50), // Return max 50 feedbacks
-    total: feedbacks.length
-  });
-});
-
-// Get audit history (for admin/analytics)
-app.get('/api/audits', (req, res) => {
-  const limit = Number(req.query.limit) || 20;
-  const skip = Number(req.query.skip) || 0;
-
-  res.json({
-    audits: auditHistory.slice(skip, skip + limit),
-    total: auditHistory.length,
-    hasMore: skip + limit < auditHistory.length
-  });
-});
-
-// Get specific audit by ID
-app.get('/api/audits/:id', (req, res) => {
-  const { id } = req.params;
-  const audit = auditHistory.find(a => a.id === id);
-
-  if (!audit) {
-    return res.status(404).json({ error: 'Audit not found' });
-  }
-
-  res.json(audit);
-});
-
-// Get all feedback (for admin)
-app.get('/api/feedback/all', (req, res) => {
-  const limit = Number(req.query.limit) || 100;
-
-  res.json({
-    feedbacks: userFeedback.slice(0, limit),
-    total: userFeedback.length
-  });
-});
-
-// Submit login test for audit (auth flow)
-app.post('/api/test-login', async (req, res) => {
-  const { url, username, password } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ error: 'URL is required.' });
-  }
-
-  // This would be implemented with Playwright
-  // For now, return a placeholder response
-  res.json({
-    success: false,
-    message: 'Login testing feature coming soon! This will test actual login functionality.',
-    note: 'We will use the provided credentials to test if login works on the target site.'
-  });
-});
-
-// ===== SCRAPER AGENT ENDPOINTS =====
-
-/**
- * Main Scraper Agent endpoint - Scrapes website with optional login or cookies
- */
+// ==================== SCRAPER AGENT ENDPOINT ====================
 app.post('/api/agent/scrape', async (req, res) => {
   const url = String(req.body?.url || '').trim();
   const credentials = req.body?.credentials ? {
@@ -215,9 +118,7 @@ app.post('/api/agent/scrape', async (req, res) => {
   }
 });
 
-/**
- * Detect login form on website
- */
+// ==================== AUTH DETECTION ====================
 app.post('/api/agent/detect-auth', async (req, res) => {
   const url = String(req.body?.url || '').trim();
 
@@ -248,179 +149,84 @@ app.post('/api/agent/detect-auth', async (req, res) => {
   }
 });
 
-// ===== NEW SCRAPER ENDPOINTS =====
+// ==================== FEEDBACK ENDPOINTS ====================
+app.post('/api/feedback', (req, res) => {
+  const { auditId, url, rating, feedback, category } = req.body;
 
-/**
- * Main scraping endpoint - proxies to Python service or uses fallback
- */
-app.post('/api/scrape', async (req, res) => {
-  try {
-    const result = await pythonBridge.scrapeWithFallback(req.body);
-    res.json(result);
-  } catch (error) {
-    logger.error('Scrape error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  if (!auditId || !feedback) {
+    return res.status(400).json({ error: 'auditId and feedback are required.' });
   }
+
+  const feedbackEntry = {
+    id: Date.now().toString(),
+    auditId,
+    url,
+    rating: Number(rating) || null,
+    feedback: String(feedback),
+    category: category || 'general',
+    timestamp: new Date().toISOString(),
+    status: 'pending'
+  };
+
+  userFeedback.unshift(feedbackEntry);
+
+  // Keep only last 500 feedbacks
+  if (userFeedback.length > 500) {
+    userFeedback.pop();
+  }
+
+  console.log(`📝 New feedback received for ${url || auditId}`);
+
+  return res.json({
+    success: true,
+    message: 'Feedback received! Thank you for helping improve the auditor.'
+  });
 });
 
-/**
- * Batch scraping endpoint
- */
-app.post('/api/scrape/batch', async (req, res) => {
-  try {
-    const { urls, ...options } = req.body;
+app.get('/api/feedback/:auditId', (req, res) => {
+  const { auditId } = req.params;
+  const feedbacks = userFeedback.filter(f => f.auditId === auditId);
 
-    if (!Array.isArray(urls) || urls.length === 0) {
-      return res.status(400).json({ error: 'URLs array is required' });
-    }
-
-    const result = await pythonBridge.scrapeBatch(urls, options);
-    res.json(result);
-  } catch (error) {
-    logger.error('Batch scrape error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+  res.json({
+    auditId,
+    feedbacks: feedbacks.slice(0, 50),
+    total: feedbacks.length
+  });
 });
 
-/**
- * Get batch job status
- */
-app.get('/api/scrape/status/:jobId', async (req, res) => {
-  try {
-    const { jobId } = req.params;
-    const status = await pythonBridge.getJobStatus(jobId);
+app.get('/api/feedback/all', (req, res) => {
+  const limit = Number(req.query.limit) || 100;
 
-    if (!status) {
-      return res.status(404).json({ error: 'Job not found' });
-    }
-
-    res.json(status);
-  } catch (error) {
-    logger.error('Job status error:', error);
-    res.status(500).json({
-      error: error.message
-    });
-  }
+  res.json({
+    feedbacks: userFeedback.slice(0, limit),
+    total: userFeedback.length
+  });
 });
 
-/**
- * Detect authentication requirements
- */
-app.post('/api/scrape/auth/detect', async (req, res) => {
-  try {
-    const { url } = req.body;
+// ==================== AUDIT HISTORY ====================
+app.get('/api/audits', (req, res) => {
+  const limit = Number(req.query.limit) || 20;
+  const skip = Number(req.query.skip) || 0;
 
-    if (!url) {
-      return res.status(400).json({ error: 'URL is required' });
-    }
-
-    const result = await pythonBridge.detectAuth(url, req.body);
-    res.json(result);
-  } catch (error) {
-    logger.error('Auth detect error:', error);
-    res.status(500).json({
-      error: error.message
-    });
-  }
+  res.json({
+    audits: auditHistory.slice(skip, skip + limit),
+    total: auditHistory.length,
+    hasMore: skip + limit < auditHistory.length
+  });
 });
 
-/**
- * Authenticate and scrape
- */
-app.post('/api/scrape/auth/scrape', async (req, res) => {
-  try {
-    const { url, username, password } = req.body;
+app.get('/api/audits/:id', (req, res) => {
+  const { id } = req.params;
+  const audit = auditHistory.find(a => a.id === id);
 
-    if (!url) {
-      return res.status(400).json({ error: 'URL is required' });
-    }
-
-    const result = await pythonBridge.authAndScrape(req.body);
-    res.json(result);
-  } catch (error) {
-    logger.error('Auth scrape error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  if (!audit) {
+    return res.status(404).json({ error: 'Audit not found' });
   }
+
+  res.json(audit);
 });
 
-/**
- * Login only (return session info)
- */
-app.post('/api/scrape/auth/login', async (req, res) => {
-  try {
-    const { url, username, password } = req.body;
-
-    if (!url || !username || !password) {
-      return res.status(400).json({ error: 'URL, username, and password are required' });
-    }
-
-    const result = await pythonBridge.login(url, username, password);
-    res.json(result);
-  } catch (error) {
-    logger.error('Login error:', error);
-    res.status(500).json({
-      error: error.message
-    });
-  }
-});
-
-/**
- * Get available scraping schemas
- */
-app.get('/api/scrape/schemas', async (req, res) => {
-  try {
-    const schemas = await pythonBridge.getSchemas();
-    res.json(schemas);
-  } catch (error) {
-    logger.error('Schemas error:', error);
-    res.status(500).json({
-      error: error.message
-    });
-  }
-});
-
-/**
- * Get scraper configuration
- */
-app.get('/api/scrape/config', async (req, res) => {
-  try {
-    const config = await pythonBridge.getConfig();
-    res.json(config);
-  } catch (error) {
-    logger.error('Config error:', error);
-    res.status(500).json({
-      error: error.message
-    });
-  }
-});
-
-/**
- * Get agent capabilities
- */
-app.get('/api/scrape/capabilities', async (req, res) => {
-  try {
-    const capabilities = await pythonBridge.getCapabilities();
-    res.json(capabilities);
-  } catch (error) {
-    logger.error('Capabilities error:', error);
-    res.status(500).json({
-      error: error.message
-    });
-  }
-});
-
-// ===== END OF NEW SCRAPER ENDPOINTS =====
-
-// Stats endpoint
+// ==================== STATS ENDPOINT ====================
 app.get('/api/stats', (_req, res) => {
   const totalAudits = auditHistory.length;
   const totalFeedback = userFeedback.length;
@@ -455,24 +261,15 @@ app.get('/api/stats', (_req, res) => {
   });
 });
 
+// ==================== START SERVER ====================
 app.listen(port, () => {
   console.log(`\n🚀 WEBAI AUDITOR SERVER v2.0`);
   console.log(`📡 Listening on http://localhost:${port}`);
   console.log(`🔧 Features:`);
-  console.log(`   - Real-user style browser automation`);
+  console.log(`   - Website auditing`);
   console.log(`   - Tech stack detection`);
-  console.log(`   - Page-by-page exploration`);
-  console.log(`   - Interactive element testing`);
-  console.log(`   - Auth/Signup flow testing`);
-  console.log(`   - User feedback system`);
-  console.log(`   - Login credential testing`);
-  console.log(`\n🆕 NEW SCRAPER FEATURES:`);
-  console.log(`   - Hybrid Python/Node.js scraping engine`);
-  console.log(`   - Auto authentication detection`);
-  console.log(`   - Undetectable stealth mode`);
-  console.log(`   - Batch processing`);
-  console.log(`   - Multiple extraction schemas`);
-  console.log(`   - Proxy rotation support`);
   console.log(`   - Screenshot capture`);
+  console.log(`   - Auth form detection`);
+  console.log(`   - User feedback system`);
   console.log(`${'='.repeat(60)}\n`);
 });
