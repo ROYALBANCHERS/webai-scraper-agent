@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     // HARDCODED BASE: This is the most important fix for GitHub Pages
-    base: mode === 'production' ? '/webai-auditor/' : '/',
+    base: mode === 'production' ? '/webai-scraper-agent/' : '/',
 
     server: {
       port: 3000,

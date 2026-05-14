@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-dist/
+# dist/ - Commented out for GitHub Pages deployment
 
 # Environment
 .env
