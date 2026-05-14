@@ -1,0 +1,489 @@
+import React, { useState, useEffect } from 'react';
+
+interface ScrapeResult {
+  success: boolean;
+  auth?: {
+    detected: boolean;
+    attempted: boolean;
+    alreadyAuthenticated?: boolean;
+    loginUrl?: string;
+    fields?: {
+      username?: string;
+      password?: string;
+      submit?: string;
+    };
+  };
+  data?: {
+    // Website Content
+    websiteContent?: {
+      fullText?: string;
+      htmlContent?: string;
+      textContent?: Array<{ selector: string; text: string }>;
+      visibleText?: string[];
+      allWords?: string[];
+      sentences?: string[];
+      title?: string;
+      description?: string;
+    };
+    // Backend Extracted Data
+    backendExtractedData?: {
+      forms?: Array<{
+        index: number;
+        action: string;
+        method: string;
+        fields: Array<{
+          type: string;
+          name: string;
+          id: string;
+          placeholder: string;
+          required: boolean;
+        }>;
+      }>;
+      interactiveElements?: {
+        buttons?: Array<{
+          text: string;
+          type: string;
+          disabled: boolean;
+        }>;
+        inputs?: Array<{
+          type: string;
+          name: string;
+          id: string;
+          placeholder: string;
+          required: boolean;
+        }>;
+      };
+      links?: Array<{
+        text: string;
+        href: string;
+        title: string;
+      }>;
+      images?: Array<{
+        src: string;
+        alt: string;
+        width: number;
+        height: number;
+      }>;
+      tables?: Array<{
+        index: number;
+        rows: Array<{
+          index: number;
+          cells: string[];
+        }>;
+      }>;
+      lists?: Array<{
+        index: number;
+        type: string;
+        items: string[];
+      }>;
+      structuredData?: any[];
+      metaTags?: Record<string, string>;
+    };
+    // Page Info
+    pageInfo?: {
+      url: string;
+      timestamp: string;
+    };
+    // Screenshot
+    screenshot?: string;
+  };
+  screenshots?: Array<{
+    name: string;
+    data: string;
+    timestamp: string;
+  }>;
+  error?: string;
+}
+
+interface ResultsProps {
+  result: ScrapeResult;
+  onReset: () => void;
+}
+
+export const Results: React.FC<ResultsProps> = ({ result, onReset }) => {
+  const [activeTab, setActiveTab] = useState<'overview' | 'json' | 'forms' | 'links' | 'images'>('overview');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  const handleCopyJson = () => {
+    const json = JSON.stringify(result, null, 2);
+    navigator.clipboard.writeText(json);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadJson = () => {
+    const json = JSON.stringify(result, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `scrape-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!result.success) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <div className="bg-red-50 rounded-2xl p-8 border border-red-200">
+          <div className="text-6xl mb-4">❌</div>
+          <h2 className="text-2xl font-bold text-red-900 mb-2">Scraping Failed</h2>
+          <p className="text-red-700 mb-6">{result.error || 'Unknown error occurred'}</p>
+          <button
+            onClick={onReset}
+            className="px-6 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 transition-all"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { auth, data, screenshots } = result;
+
+  // Extract data from new structure
+  const websiteContent = data?.websiteContent || {};
+  const backendExtractedData = data?.backendExtractedData || {};
+  const pageInfo = data?.pageInfo || {};
+
+  // Get counts for display
+  const formsCount = backendExtractedData.forms?.length || 0;
+  const linksCount = backendExtractedData.links?.length || 0;
+  const imagesCount = backendExtractedData.images?.length || 0;
+  const buttonsCount = backendExtractedData.interactiveElements?.buttons?.length || 0;
+  const tablesCount = backendExtractedData.tables?.length || 0;
+  const listsCount = backendExtractedData.lists?.length || 0;
+
+  // Get title and URL from new structure
+  const pageTitle = websiteContent.title || data?.pageInfo?.url || 'N/A';
+  const pageUrl = data?.pageInfo?.url || '';
+
+  return (
+    <div className="animate-fade-in max-w-7xl mx-auto px-4 py-8">
+
+      {/* Header */}
+      <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <div>
+          <h2 className="text-3xl font-light text-gray-900">Scraping Results</h2>
+          <p className="text-gray-500 mt-2">
+            Generated by WebAI Scraper
+          </p>
+          {pageUrl && (
+            <p className="text-sm text-purple-600 mt-1 font-mono">
+              🔗 {pageUrl}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={onReset}
+            className="text-sm text-gray-500 hover:text-black font-medium border border-gray-200 px-4 py-2 rounded-lg hover:border-gray-400 transition-all"
+          >
+            New Scrape
+          </button>
+          <button
+            onClick={handleCopyJson}
+            className="text-sm text-purple-600 hover:text-purple-700 font-medium border border-purple-200 px-4 py-2 rounded-lg hover:border-purple-400 transition-all"
+          >
+            {copied ? '✓ Copied' : 'Copy JSON'}
+          </button>
+          <button
+            onClick={handleDownloadJson}
+            className="text-sm text-purple-600 hover:text-purple-700 font-medium border border-purple-200 px-4 py-2 rounded-lg hover:border-purple-400 transition-all"
+          >
+            Download JSON
+          </button>
+        </div>
+      </div>
+
+      {/* Auth Status */}
+      {auth && (
+        <div className={`mb-6 rounded-xl p-4 border ${auth.detected ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{auth.detected ? '🔐' : '🔓'}</span>
+            <div>
+              <p className="font-semibold text-gray-900">
+                {auth.detected ? 'Login Form Detected' : 'No Login Required'}
+              </p>
+              <p className="text-sm text-gray-600">
+                {auth.attempted ? 'Login was attempted' : 'No credentials provided'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="flex border-b border-gray-200 overflow-x-auto">
+          {[
+            { id: 'overview', label: 'Overview', icon: '📊' },
+            { id: 'json', label: 'JSON', icon: '{ }' },
+            { id: 'forms', label: `Forms (${formsCount})`, icon: '📝' },
+            { id: 'links', label: `Links (${linksCount})`, icon: '🔗' },
+            { id: 'images', label: `Images (${imagesCount})`, icon: '🖼️' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-6 py-4 font-medium whitespace-nowrap transition-colors ${
+                activeTab === tab.id
+                  ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="p-6">
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
+            <div className="space-y-8">
+              {/* Screenshot */}
+              {data?.screenshot && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Page Screenshot</h3>
+                  <div className="rounded-xl overflow-hidden border border-gray-200">
+                    <img
+                      src={`data:image/png;base64,${data.screenshot}`}
+                      alt="Page screenshot"
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Title */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-2">Page Title</h3>
+                <p className="text-lg text-gray-800">{pageTitle}</p>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                  <p className="text-2xl font-bold text-purple-700">{formsCount}</p>
+                  <p className="text-sm text-purple-600">Forms</p>
+                </div>
+                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                  <p className="text-2xl font-bold text-blue-700">{linksCount}</p>
+                  <p className="text-sm text-blue-600">Links</p>
+                </div>
+                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+                  <p className="text-2xl font-bold text-green-700">{imagesCount}</p>
+                  <p className="text-sm text-green-600">Images</p>
+                </div>
+                <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
+                  <p className="text-2xl font-bold text-orange-700">{buttonsCount}</p>
+                  <p className="text-sm text-orange-600">Buttons</p>
+                </div>
+              </div>
+
+              {/* Text Content Preview */}
+              {websiteContent.fullText && (
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-2">Text Content</h3>
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <p className="text-sm text-gray-600 line-clamp-4">
+                      {websiteContent.fullText.substring(0, 500)}...
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {websiteContent.htmlContent?.length?.toLocaleString() || 0} characters of HTML
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Tables */}
+              {backendExtractedData.tables && backendExtractedData.tables.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-4">
+                    Tables ({tablesCount})
+                  </h3>
+                  <div className="space-y-4">
+                    {backendExtractedData.tables.slice(0, 3).map((table, idx) => (
+                      <div key={idx} className="bg-gray-50 rounded-xl p-4 border border-gray-200 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {table.rows.slice(0, 5).map((row, rowIdx) => (
+                              <tr key={rowIdx} className={rowIdx === 0 ? 'font-semibold border-b border-gray-300' : ''}>
+                                {row.cells.map((cell, cellIdx) => (
+                                  <td key={cellIdx} className="px-3 py-2 border border-gray-200">
+                                    {cell}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {table.rows.length > 5 && (
+                          <p className="text-xs text-gray-500 mt-2">+ {table.rows.length - 5} more rows</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lists */}
+              {backendExtractedData.lists && backendExtractedData.lists.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-4">
+                    Lists ({listsCount})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {backendExtractedData.lists.slice(0, 4).map((list, idx) => (
+                      <div key={idx} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <p className="text-xs text-gray-500 uppercase mb-2">{list.type} list</p>
+                        <ul className="space-y-1">
+                          {list.items.slice(0, 5).map((item, itemIdx) => (
+                            <li key={itemIdx} className="text-sm text-gray-700 flex items-start gap-2">
+                              <span className="text-purple-500">•</span>
+                              <span className="line-clamp-1">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        {list.items.length > 5 && (
+                          <p className="text-xs text-gray-500 mt-2">+ {list.items.length - 5} more items</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* JSON Tab */}
+          {activeTab === 'json' && (
+            <div>
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={handleCopyJson}
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  {copied ? '✓ Copied!' : 'Copy to Clipboard'}
+                </button>
+              </div>
+              <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto">
+                <pre className="text-sm text-gray-300">
+                  <code>{JSON.stringify(result, null, 2)}</code>
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Forms Tab */}
+          {activeTab === 'forms' && (
+            <div>
+              {backendExtractedData.forms && backendExtractedData.forms.length > 0 ? (
+                <div className="space-y-4">
+                  {backendExtractedData.forms.map((form, idx) => (
+                    <div key={idx} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900">Form #{idx + 1}</h4>
+                        <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full uppercase">
+                          {form.method}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">
+                        <span className="font-mono">{form.action || 'N/A'}</span>
+                      </p>
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-500 uppercase">Fields</p>
+                        {form.fields.map((field, fieldIdx) => (
+                          <div key={fieldIdx} className="flex items-center gap-3 text-sm bg-white p-2 rounded-lg border border-gray-200">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-mono">
+                              {field.type}
+                            </span>
+                            <span className="font-mono text-gray-700">
+                              {field.name || field.id || 'unnamed'}
+                            </span>
+                            {field.placeholder && (
+                              <span className="text-gray-400 text-xs">"{field.placeholder}"</span>
+                            )}
+                            {field.required && (
+                              <span className="text-red-500 text-xs">*required</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No forms found on this page.</p>
+              )}
+            </div>
+          )}
+
+          {/* Links Tab */}
+          {activeTab === 'links' && (
+            <div>
+              {backendExtractedData.links && backendExtractedData.links.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">#</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Text</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">URL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backendExtractedData.links.map((link, idx) => (
+                        <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4 text-sm text-gray-500">{idx + 1}</td>
+                          <td className="py-3 px-4 text-sm text-gray-900">{link.text || 'N/A'}</td>
+                          <td className="py-3 px-4 text-sm font-mono text-purple-600 truncate max-w-md">
+                            {link.href}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No links found on this page.</p>
+              )}
+            </div>
+          )}
+
+          {/* Images Tab */}
+          {activeTab === 'images' && (
+            <div>
+              {backendExtractedData.images && backendExtractedData.images.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {backendExtractedData.images.map((img, idx) => (
+                    <div key={idx} className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                      <img
+                        src={img.src}
+                        alt={img.alt}
+                        className="w-full h-32 object-cover rounded-lg mb-2"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23ccc" width="100" height="100"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="%23666"%3ENo Image%3C/text%3E%3C/svg%3E';
+                        }}
+                      />
+                      <p className="text-xs text-gray-500 truncate">{img.alt || 'No alt'}</p>
+                      <p className="text-xs text-gray-400">{img.width} × {img.height}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No images found on this page.</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
