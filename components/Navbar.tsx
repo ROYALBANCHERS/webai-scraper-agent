@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, setPage }) => {
           </div>
 
           <div className="hidden md:flex items-center space-x-4">
-             <button onClick={() => setPage(Page.PRICING)} className="text-sm font-medium text-gray-900 hover:text-blue-600">Login</button>
+             <button onClick={() => setPage(Page.LOGIN)} className="text-sm font-medium text-gray-900 hover:text-blue-600">Login</button>
              <button onClick={() => setPage(Page.PRICING)} className="text-sm font-medium bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors">
                Get Premium
              </button>

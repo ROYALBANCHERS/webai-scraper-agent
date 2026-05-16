@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script>
+    // GitHub Pages 404 handler for hash-based routing
+    // Converts path-based URLs to hash-based URLs
+    (function(l) {
+      var path = l.pathname;
+      var repo = '/webai-scraper-agent';
+
+      // If we're not at the root, redirect to root with hash
+      if (path !== repo && path !== repo + '/') {
+        var subPath = path.replace(repo, '');
+        // Convert path to page format (e.g., /blogs -> #blogs)
+        var hash = subPath.replace(/^\//, '').replace(/\/$/, '');
+        if (hash) {
+          l.replace(repo + '/#' + hash);
+        } else {
+          l.replace(repo + '/');
+        }
+      }
+    })(window.location);
+  </script>
+</head>
+<body>
+  <p>Redirecting to the main application...</p>
+</body>
+</html>

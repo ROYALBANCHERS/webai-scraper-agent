@@ -20,8 +20,15 @@ import { AppState, Page } from './types';
 import { scrapeWebsite, checkBackendHealth } from './services/geminiService';
 
 const App: React.FC = () => {
+  // Initialize page from URL hash
+  const getPageFromHash = (): Page => {
+    const hash = window.location.hash.slice(1); // Remove the #
+    const pageKey = hash.toUpperCase().replace(/-/g, '_');
+    return Object.values(Page).includes(pageKey as Page) ? (pageKey as Page) : Page.HOME;
+  };
+
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
-  const [currentPage, setCurrentPage] = useState<Page>(Page.HOME);
+  const [currentPage, setCurrentPage] = useState<Page>(getPageFromHash());
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [scrapingUrl, setScrapingUrl] = useState<string>('');
@@ -35,6 +42,24 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // Handle URL hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const page = getPageFromHash();
+      setCurrentPage(page);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Function to set page and update URL hash
+  const setPageWithHash = useCallback((page: Page) => {
+    const pageName = page.toLowerCase().replace(/_/g, '-');
+    window.location.hash = pageName;
+    setCurrentPage(page);
+  }, []);
+
   // Scroll to top whenever the page changes
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -42,7 +67,7 @@ const App: React.FC = () => {
 
   const handleScrape = useCallback(async (url: string, credentials?: { username: string; password: string }, cookies?: any[]) => {
     setAppState(AppState.LOADING);
-    setCurrentPage(Page.HOME);
+    setPageWithHash(Page.HOME);
     setError(null);
     setScrapingUrl(url);
     setElapsedSeconds(0);
@@ -56,7 +81,7 @@ const App: React.FC = () => {
       setError(err?.message || "Something went wrong while scraping the site. Try again?");
       setAppState(AppState.ERROR);
     }
-  }, []);
+  }, [setPageWithHash]);
 
   useEffect(() => {
     if (appState !== AppState.LOADING) return;
@@ -68,24 +93,24 @@ const App: React.FC = () => {
     setAppState(AppState.IDLE);
     setResult(null);
     setError(null);
-    setCurrentPage(Page.HOME);
+    setPageWithHash(Page.HOME);
     setScrapingUrl('');
-  }, []);
+  }, [setPageWithHash]);
 
   const renderContent = () => {
     switch (currentPage) {
       case Page.SERVICES: return <Services />;
-      case Page.BLOGS: return <Blogs setPage={setCurrentPage} />;
-      case Page.BLOG_POST: return <BlogPost setPage={setCurrentPage} />;
+      case Page.BLOGS: return <Blogs setPage={setPageWithHash} />;
+      case Page.BLOG_POST: return <BlogPost setPage={setPageWithHash} />;
       case Page.AI_NEWS: return <AINews />;
       case Page.HOW_IT_WORKS: return <HowItWorks />;
       case Page.CONTACT: return <Contact />;
       case Page.PRICING: return <Pricing />;
-      case Page.API_DOCS: return <ApiDocs setPage={setCurrentPage} />;
-      case Page.HELP_CENTER: return <HelpCenter setPage={setCurrentPage} />;
-      case Page.PRIVACY: return <PrivacyPolicy setPage={setCurrentPage} />;
-      case Page.TERMS: return <TermsOfService setPage={setCurrentPage} />;
-      case Page.COOKIES: return <CookiePolicy setPage={setCurrentPage} />;
+      case Page.API_DOCS: return <ApiDocs setPage={setPageWithHash} />;
+      case Page.HELP_CENTER: return <HelpCenter setPage={setPageWithHash} />;
+      case Page.PRIVACY: return <PrivacyPolicy setPage={setPageWithHash} />;
+      case Page.TERMS: return <TermsOfService setPage={setPageWithHash} />;
+      case Page.COOKIES: return <CookiePolicy setPage={setPageWithHash} />;
       case Page.LOGIN: return <LoginPage />;
       case Page.HOME:
       default:
@@ -129,7 +154,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout currentPage={currentPage} setPage={setCurrentPage}>
+    <Layout currentPage={currentPage} setPage={setPageWithHash}>
       {renderContent()}
     </Layout>
   );
