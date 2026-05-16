@@ -19,28 +19,39 @@ import { CookiePolicy } from './components/pages/CookiePolicy';
 import { AppState, Page } from './types';
 import { scrapeWebsite, checkBackendHealth } from './services/geminiService';
 
-const App: React.FC = () => {
-  // Initialize page from URL hash
-  const getPageFromHash = (): Page => {
-    const hash = window.location.hash.slice(1); // Remove the #
-    const pageKey = hash.toUpperCase().replace(/-/g, '_');
-    return Object.values(Page).includes(pageKey as Page) ? (pageKey as Page) : Page.HOME;
-  };
+// Helper function to get page from URL hash (defined outside component)
+const getPageFromHash = (): Page => {
+  if (typeof window === 'undefined') return Page.HOME;
+  const hash = window.location.hash.slice(1); // Remove the #
+  const pageKey = hash.toUpperCase().replace(/-/g, '_');
+  return Object.values(Page).includes(pageKey as Page) ? (pageKey as Page) : Page.HOME;
+};
 
+const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
-  const [currentPage, setCurrentPage] = useState<Page>(getPageFromHash());
+  const [currentPage, setCurrentPage] = useState<Page>(Page.HOME);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [scrapingUrl, setScrapingUrl] = useState<string>('');
   const [backendAvailable, setBackendAvailable] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [mounted, setMounted] = useState(false);
 
-  // Check backend health on mount
+  // Check backend health on mount and initialize page from URL
   useEffect(() => {
+    setMounted(true);
     checkBackendHealth().then(available => {
       setBackendAvailable(available);
     });
   }, []);
+
+  // Initialize page from URL hash after mount
+  useEffect(() => {
+    if (mounted) {
+      const initialPage = getPageFromHash();
+      setCurrentPage(initialPage);
+    }
+  }, [mounted]);
 
   // Handle URL hash changes
   useEffect(() => {
